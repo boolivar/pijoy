@@ -98,15 +98,10 @@ struct gamepad {
     char phys[32];
     struct input_dev *dev;
 
-    struct timer_list timer;
-    struct mutex mutex;
-
     int port;
     int mode;
     int used;
 };
-
-static struct gamepad *gamepads[GAMEPADS_MAX] = {0};
 
 static const short db9_multi_btn[] = { BTN_TRIGGER, BTN_THUMB };
 static const short db9_genesis_btn[] = { BTN_START, BTN_A, BTN_B, BTN_C, BTN_X, BTN_Y, BTN_Z, BTN_MODE };
@@ -163,6 +158,13 @@ static const struct gpio js1[] = {
 
 static const struct gpio *js[] = { js0, js1 };
 
+static struct {
+    int used;
+    struct mutex mutx;
+    struct timer_list timer;
+    struct gamepad *gamepads[GAMEPADS_MAX];
+} driver = {0};
+
 static void write_control(const struct gpio* port, int level);
 static int read_data(const struct gpio* port);
 
@@ -211,7 +213,7 @@ static void dev_poll(unsigned long private)
 
     input_sync(dev);
 
-    mod_timer(&pad->timer, jiffies + REFRESH_TIME);
+    mod_timer(&driver.timer, jiffies + REFRESH_TIME);
 }
 
 static void write_control(const struct gpio* port, int level) {
@@ -240,28 +242,26 @@ static int dev_open(struct input_dev *dev)
     const struct gpio *port = js[pad->port];
     int err;
 
-    err = mutex_lock_interruptible(&pad->mutex);
-    if (err)
+    err = mutex_lock_interruptible(&driver.mutx);
+    if (err) {
         return err;
+    }
 
-    if (pad->used == 0) {
+    if (!driver.used) {
         err = gpio_request_array(port, ARRAY_SIZE(js0));
         if (err == 0) {
-            mod_timer(&pad->timer, jiffies + REFRESH_TIME);
+            driver.timer.data = (long) pad; // FIXME: dev_poll
+            mod_timer(&driver.timer, jiffies + REFRESH_TIME);
             printk(KERN_DEBUG "pijoy.c: request gpio ok, size=%d\n", ARRAY_SIZE(js0));
         }
     }
 
     if (err == 0) {
-        pad->used++;
+        ++driver.used;
+        ++pad->used;
     }
-/*
-    if (!db9->used++) {
-        gpio_request_array(db9->port, ARRAY_SIZE(js0));
-        mod_timer(&db9->timer, jiffies + DB9_REFRESH_TIME);
-    }
-*/
-    mutex_unlock(&pad->mutex);
+
+    mutex_unlock(&driver.mutx);
 
     printk(KERN_DEBUG "pijoy.c: open device %d(%d used), err=%d\n", pad->port, pad->used, err);
     return err;
@@ -272,13 +272,14 @@ static void dev_close(struct input_dev *dev)
     struct gamepad *pad = input_get_drvdata(dev);
     const struct gpio *port = js[pad->port];
 
-    mutex_lock(&pad->mutex);
-    if (!--pad->used) {
-        del_timer_sync(&pad->timer);
+    mutex_lock(&driver.mutx);
+    if (!--driver.used) {
+        del_timer_sync(&driver.timer);
         gpio_free_array(port, ARRAY_SIZE(js0));
         printk(KERN_DEBUG "pijoy.c: free gpio, size=%d\n", ARRAY_SIZE(js0));
     }
-    mutex_unlock(&pad->mutex);
+    --pad->used;
+    mutex_unlock(&driver.mutx);
     printk(KERN_DEBUG "pijoy.c: close device %d(%d used)\n", pad->port, pad->used);
 }
 
@@ -304,12 +305,8 @@ static struct gamepad __init *db9_probe(int index, int mode)
         goto err_out;
     }
 
-    mutex_init(&pad->mutex);
     pad->port = index;
     pad->mode = mode;
-    init_timer(&pad->timer);
-    pad->timer.data = (long) pad;
-    pad->timer.function = dev_poll;
 
     pad->dev = input_dev = input_allocate_device();
     if (!input_dev) {
@@ -372,6 +369,10 @@ static int __init pijoy_init(void)
     int devices = 0;
     int err = 0;
 
+    mutex_init(&driver.mutx);
+    init_timer(&driver.timer);
+    driver.timer.function = dev_poll;
+
     for (i = 0; i < GAMEPADS_MAX; ++i) {
         if (config[i].nargs > 0) {
             if (config[i].nargs < 2) {
@@ -380,9 +381,9 @@ static int __init pijoy_init(void)
                 break;
             }
 
-            gamepads[i] = db9_probe(config[i].args[ARG_GPIO], config[i].args[ARG_MODE]);
-            if (IS_ERR(gamepads[i])) {
-                err = PTR_ERR(gamepads[i]);
+            driver.gamepads[i] = db9_probe(config[i].args[ARG_GPIO], config[i].args[ARG_MODE]);
+            if (IS_ERR(driver.gamepads[i])) {
+                err = PTR_ERR(driver.gamepads[i]);
                 break;
             }
 
@@ -392,7 +393,11 @@ static int __init pijoy_init(void)
 
     if (err) {
         printk(KERN_ERR "pijoy.c: error on init: %d.\n", err);
-        pijoy_exit();
+        while (--i >= 0) {
+            if (driver.gamepads[i]) {
+                db9_remove(driver.gamepads[i]);
+            }
+        }
         return err;
     }
 
@@ -406,8 +411,8 @@ static void __exit pijoy_exit(void)
     int i;
 
     for (i = 0; i < GAMEPADS_MAX; ++i) {
-        if (gamepads[i] && !IS_ERR(gamepads[i])) {
-            db9_remove(gamepads[i]);
+        if (driver.gamepads[i]) {
+            db9_remove(driver.gamepads[i]);
         }
     }
 }
