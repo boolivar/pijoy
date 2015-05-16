@@ -178,7 +178,7 @@ static void dev_poll(unsigned long private)
     udelay(GENESIS6_DELAY);
 
     for (i = 0; i < GAMEPADS_MAX; ++i) {
-        if (driver.gamepads[i]->used) {
+        if (driver.gamepads[i] && driver.gamepads[i]->used) {
             dev = driver.gamepads[i]->dev;
 
             data = read_data(js[driver.gamepads[i]->port]);
@@ -193,7 +193,7 @@ static void dev_poll(unsigned long private)
     udelay(GENESIS6_DELAY);
 
     for (i = 0; i < GAMEPADS_MAX; ++i) {
-        if (driver.gamepads[i]->used) {
+        if (driver.gamepads[i] && driver.gamepads[i]->used) {
             dev = driver.gamepads[i]->dev;
 
             data = read_data(js[driver.gamepads[i]->port]);
@@ -212,7 +212,7 @@ static void dev_poll(unsigned long private)
     udelay(GENESIS6_DELAY);
 
     for (i = 0; i < GAMEPADS_MAX; ++i) {
-        if (driver.gamepads[i]->used) {
+        if (driver.gamepads[i] && driver.gamepads[i]->used) {
             dev = driver.gamepads[i]->dev;
 
             data = read_data(js[driver.gamepads[i]->port]);
@@ -232,7 +232,7 @@ static void dev_poll(unsigned long private)
     write_controls(LEVEL_SELECT);
 
     for (i = 0; i < GAMEPADS_MAX; ++i) {
-        if (driver.gamepads[i]->used) {
+        if (driver.gamepads[i] && driver.gamepads[i]->used) {
             input_sync(driver.gamepads[i]->dev);
         }
     }
@@ -243,7 +243,7 @@ static void dev_poll(unsigned long private)
 static void write_controls(int level) {
     int i;
     for (i = 0; i < GAMEPADS_MAX; ++i) {
-        if (driver.gamepads[i]->used) {
+        if (driver.gamepads[i] && driver.gamepads[i]->used) {
             write_control(js[driver.gamepads[i]->port], level);
         }
     }
