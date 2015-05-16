@@ -153,7 +153,7 @@ static const struct gpio js1[] = {
     gpio_in(0, "js1d3"),
     gpio_in(5, "js1d4"),
     gpio_in(6, "js1d5"),
-    //gpio_out(1, "js1sel"),
+    gpio_out(1, "js1sel"),
 };
 
 static const struct gpio *js[] = { js0, js1 };
@@ -165,55 +165,88 @@ static struct {
     struct gamepad *gamepads[GAMEPADS_MAX];
 } driver = {0};
 
+static void write_controls(int level);
 static void write_control(const struct gpio* port, int level);
 static int read_data(const struct gpio* port);
 
 static void dev_poll(unsigned long private)
 {
-    struct gamepad *pad = (struct gamepad *) private;
-    const struct gpio *port = js[pad->port];
-    struct input_dev *dev = pad->dev;
-    int data;
+    struct input_dev *dev;
+    int i, data;
 
-    write_control(port, LEVEL_UNSELECT); /* 1 */
-    udelay(GENESIS6_DELAY);
-    data = read_data(port);
-
-    input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
-    input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
-    input_report_key(dev, BTN_B, ~data & DB9_FIRE1);
-    input_report_key(dev, BTN_C, ~data & DB9_FIRE2);
-
-    write_control(port, LEVEL_SELECT);
-    udelay(GENESIS6_DELAY);
-    data = read_data(port);
-
-    input_report_key(dev, BTN_A, ~data & DB9_FIRE1);
-    input_report_key(dev, BTN_START, ~data & DB9_FIRE2);
-
-    write_control(port, LEVEL_UNSELECT); /* 2 */
-    udelay(GENESIS6_DELAY);
-    write_control(port, LEVEL_SELECT);
-    udelay(GENESIS6_DELAY);
-    write_control(port, LEVEL_UNSELECT); /* 3 */
-    udelay(GENESIS6_DELAY);
-    data=read_data(port);
-
-    input_report_key(dev, BTN_X,    ~data & DB9_LEFT);
-    input_report_key(dev, BTN_Y,    ~data & DB9_DOWN);
-    input_report_key(dev, BTN_Z,    ~data & DB9_UP);
-    input_report_key(dev, BTN_MODE, ~data & DB9_RIGHT);
-
-    write_control(port, LEVEL_SELECT);
-    udelay(GENESIS6_DELAY);
-    write_control(port, LEVEL_UNSELECT); /* 4 */
+    write_controls(LEVEL_UNSELECT); /* 1 */
     udelay(GENESIS6_DELAY);
 
-    write_control(port, LEVEL_SELECT);
+    for (i = 0; i < GAMEPADS_MAX; ++i) {
+        if (driver.gamepads[i]->used) {
+            dev = driver.gamepads[i]->dev;
 
-    input_sync(dev);
+            data = read_data(js[driver.gamepads[i]->port]);
+            input_report_abs(dev, ABS_X, (data & DB9_RIGHT ? 0 : 1) - (data & DB9_LEFT ? 0 : 1));
+            input_report_abs(dev, ABS_Y, (data & DB9_DOWN  ? 0 : 1) - (data & DB9_UP   ? 0 : 1));
+            input_report_key(dev, BTN_B, ~data & DB9_FIRE1);
+            input_report_key(dev, BTN_C, ~data & DB9_FIRE2);
+        }
+    }
+
+    write_controls(LEVEL_SELECT);
+    udelay(GENESIS6_DELAY);
+
+    for (i = 0; i < GAMEPADS_MAX; ++i) {
+        if (driver.gamepads[i]->used) {
+            dev = driver.gamepads[i]->dev;
+
+            data = read_data(js[driver.gamepads[i]->port]);
+            input_report_key(dev, BTN_A, ~data & DB9_FIRE1);
+            input_report_key(dev, BTN_START, ~data & DB9_FIRE2);
+        }
+    }
+
+    write_controls(LEVEL_UNSELECT); /* 2 */
+    udelay(GENESIS6_DELAY);
+
+    write_controls(LEVEL_SELECT);
+    udelay(GENESIS6_DELAY);
+
+    write_controls(LEVEL_UNSELECT); /* 3 */
+    udelay(GENESIS6_DELAY);
+
+    for (i = 0; i < GAMEPADS_MAX; ++i) {
+        if (driver.gamepads[i]->used) {
+            dev = driver.gamepads[i]->dev;
+
+            data = read_data(js[driver.gamepads[i]->port]);
+            input_report_key(dev, BTN_X,    ~data & DB9_LEFT);
+            input_report_key(dev, BTN_Y,    ~data & DB9_DOWN);
+            input_report_key(dev, BTN_Z,    ~data & DB9_UP);
+            input_report_key(dev, BTN_MODE, ~data & DB9_RIGHT);
+        }
+    }
+
+    write_controls(LEVEL_SELECT);
+    udelay(GENESIS6_DELAY);
+
+    write_controls(LEVEL_UNSELECT); /* 4 */
+    udelay(GENESIS6_DELAY);
+
+    write_controls(LEVEL_SELECT);
+
+    for (i = 0; i < GAMEPADS_MAX; ++i) {
+        if (driver.gamepads[i]->used) {
+            input_sync(driver.gamepads[i]->dev);
+        }
+    }
 
     mod_timer(&driver.timer, jiffies + REFRESH_TIME);
+}
+
+static void write_controls(int level) {
+    int i;
+    for (i = 0; i < GAMEPADS_MAX; ++i) {
+        if (driver.gamepads[i]->used) {
+            write_control(js[driver.gamepads[i]->port], level);
+        }
+    }
 }
 
 static void write_control(const struct gpio* port, int level) {
