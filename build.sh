@@ -17,10 +17,13 @@ if [ $1 ]; then
 fi
 
 if [ ! "$(ls ${KERNEL_DIR})" ]; then
-  echo "No kernel source found"
+  echo "No kernel source found. Try to pass your firmware version tag (e.g. '1.20181112') or commit hash from https://github.com/raspberrypi/firmware repo"
   exit 1
 fi
 
-cd ${BUILD_DIR}
-make ARCH=arm CROSS_COMPILE=${CCPREFIX} oldconfig && \
-  make ARCH=arm CROSS_COMPILE=${CCPREFIX} modules_prepare
+cp ${BUILD_DIR}/.config ${KERNEL_DIR}
+cd ${KERNEL_DIR} && \
+  make ARCH=arm CROSS_COMPILE=${CCPREFIX} oldconfig && \
+  make ARCH=arm CROSS_COMPILE=${CCPREFIX} modules_prepare && \
+  cd ${BUILD_DIR} && \
+  make ARCH=arm CROSS_COMPILE=${CCPREFIX} -C ${KERNEL_DIR} M=$(pwd)
