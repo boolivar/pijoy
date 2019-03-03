@@ -4,6 +4,7 @@ LABEL maintainer="boolivar@gmail.com"
 LABEL description="Raspberry Pi Build Tools Image"
 
 RUN apt-get update && apt-get install -y \
+    bc \
     curl \
     gcc \
     git \
