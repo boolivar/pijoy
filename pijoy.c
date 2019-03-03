@@ -153,7 +153,7 @@ static const struct gpio js1[] = {
     gpio_in(0, "js1d3"),
     gpio_in(5, "js1d4"),
     gpio_in(6, "js1d5"),
-    gpio_out(1, "js1sel"),
+    gpio_out(12, "js1sel"),
 };
 
 static const struct gpio *js[] = { js0, js1 };
