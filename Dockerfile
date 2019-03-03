@@ -17,7 +17,7 @@ RUN git clone --depth 1 https://github.com/raspberrypi/tools.git ${RPI_TOOLS}
 ADD build.sh /home/build.sh
 
 ARG BUILD_DIR=/home/rpi
-ENV BUILD_DIR ${KERNEL_DIR}
+ENV BUILD_DIR ${BUILD_DIR}
 VOLUME ${BUILD_DIR}
 
 ARG KERNEL_DIR=/home/kernel
