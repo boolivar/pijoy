@@ -272,7 +272,6 @@ static int read_data(const struct gpio* port) {
 static int dev_open(struct input_dev *dev)
 {
     struct gamepad *pad = input_get_drvdata(dev);
-    const struct gpio *port = js[pad->port];
     int err;
 
     err = mutex_lock_interruptible(&driver.mutx);
@@ -280,13 +279,10 @@ static int dev_open(struct input_dev *dev)
         return err;
     }
 
-    if (!driver.used) {
-        err = gpio_request_array(port, ARRAY_SIZE(js0));
-        if (err == 0) {
-            driver.timer.data = (long) pad; // FIXME: dev_poll
-            mod_timer(&driver.timer, jiffies + REFRESH_TIME);
-            printk(KERN_DEBUG "pijoy.c: request gpio ok, size=%d\n", ARRAY_SIZE(js0));
-        }
+    err = gpio_request_array(js[pad->port], ARRAY_SIZE(js0));
+    if (err == 0 && driver.used == 0) {
+        mod_timer(&driver.timer, jiffies + REFRESH_TIME);
+        printk(KERN_DEBUG "pijoy.c: request gpio ok, size=%d\n", ARRAY_SIZE(js0));
     }
 
     if (err == 0) {
@@ -303,12 +299,11 @@ static int dev_open(struct input_dev *dev)
 static void dev_close(struct input_dev *dev)
 {
     struct gamepad *pad = input_get_drvdata(dev);
-    const struct gpio *port = js[pad->port];
 
     mutex_lock(&driver.mutx);
     if (!--driver.used) {
         del_timer_sync(&driver.timer);
-        gpio_free_array(port, ARRAY_SIZE(js0));
+        gpio_free_array(js[pad->port], ARRAY_SIZE(js0));
         printk(KERN_DEBUG "pijoy.c: free gpio, size=%d\n", ARRAY_SIZE(js0));
     }
     --pad->used;
