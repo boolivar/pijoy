@@ -258,7 +258,7 @@ static int read_data(const struct gpio* port) {
     int value = 0;
     int mask = 1;
 
-    for (i = 0; i < ARRAY_SIZE(js0); ++i) {
+    for (i = 0; i < (ARRAY_SIZE(js0) - 1); ++i) {
         int pin = gpio_get_value(port[i].gpio);
         if (pin) {
             value |= mask;
