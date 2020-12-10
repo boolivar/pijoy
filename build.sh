@@ -1,27 +1,42 @@
-#!/bin/sh
+#!/bin/sh -e
+
+test -z "$KERNEL_DIR" -o -z "$BUILD_DIR" && {
+  echo "Looks like KERNEL_DIR or BUILD_DIR is undefined"
+  exit 1
+}
+
+test -d "$KERNEL_DIR" || {
+  echo "KERNEL_DIR is not directory"
+  exit 2
+}
 
 if [ $1 ]; then
-  cd ${KERNEL_DIR} && rm -rf ./*
+  (
+    cd "${KERNEL_DIR}" && rm -rf ./*
 
-  kernel_ref=`curl -L https://github.com/raspberrypi/firmware/raw/$1/extra/git_hash`
+    kernel_ref=`curl -L https://github.com/raspberrypi/firmware/raw/$1/extra/git_hash`
 
-  echo "Fetch kernel from https://github.com/raspberrypi/linux/tree/${kernel_ref}"
+    echo "Fetch kernel from https://github.com/raspberrypi/linux/tree/${kernel_ref}"
 
-  curl -L https://github.com/raspberrypi/linux/archive/${kernel_ref}.tar.gz -o kernel.tar.gz && \
-      tar -xzf kernel.tar.gz && \
-      find . -mindepth 2 -maxdepth 2 -exec mv -t . '{}' +
+    curl -L "https://github.com/raspberrypi/linux/archive/${kernel_ref}.tar.gz" -o kernel.tar.gz
+    tar -xzf kernel.tar.gz
+    find . -mindepth 2 -maxdepth 2 -exec mv -t . '{}' +
 
-  rm -rf linux-${kernel_ref}
-  rm kernel.tar.gz
-  curl -L https://github.com/raspberrypi/firmware/raw/$1/extra/Module.symvers -o Module.symvers
+    rm -rf "linux-${kernel_ref}"
+    rm kernel.tar.gz
+    curl -L "https://github.com/raspberrypi/firmware/raw/$1/extra/Module.symvers" -o Module.symvers
+  )
 fi
 
 if [ ! "$(ls ${KERNEL_DIR})" ]; then
   echo "No kernel source found. Try to pass your firmware version tag (e.g. '1.20181112') or commit hash from https://github.com/raspberrypi/firmware repo"
-  exit 1
+  exit 3
 fi
 
-cp ${BUILD_DIR}/.config ${KERNEL_DIR}
+test -f "${BUILD_DIR}/.config" && {
+  cp "${BUILD_DIR}/.config" "${KERNEL_DIR}"
+}
+
 cd ${KERNEL_DIR} && \
   make ARCH=arm CROSS_COMPILE=${CCPREFIX} oldconfig && \
   make ARCH=arm CROSS_COMPILE=${CCPREFIX} modules_prepare && \
